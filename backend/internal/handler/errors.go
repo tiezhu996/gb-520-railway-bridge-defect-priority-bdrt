@@ -12,7 +12,13 @@ import (
 )
 
 func handleError(c *gin.Context, err error) {
+	var blocked *service.ErrCompletionBlocked
 	switch {
+	case errors.As(err, &blocked):
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, util.Envelope{
+			Error: "completion_blocked", Message: blocked.Error(),
+			Data: gin.H{"blockers": blocked.Blockers},
+		})
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		util.Fail(c, http.StatusNotFound, "not_found", "record was not found")
 	case errors.Is(err, repository.ErrVersionConflict):

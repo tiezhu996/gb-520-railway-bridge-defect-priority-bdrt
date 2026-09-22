@@ -58,6 +58,15 @@ func Open(ctx context.Context, cfg config.Config, log *slog.Logger) (*gorm.DB, *
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect database: %w", err)
 	}
+	if sqlDB, err := db.DB(); err == nil {
+		if cfg.DatabaseDriver == "sqlite" {
+			// SQLite has only table-level locks; serialize access so
+			// concurrent transactions wait instead of failing with
+			// SQLITE_BUSY/SQLITE_LOCKED. Production PostgreSQL keeps a normal
+			// pool and relies on row locks plus the optimistic predicate.
+			sqlDB.SetMaxOpenConns(1)
+		}
+	}
 	if err := migrate(db); err != nil {
 		return nil, nil, err
 	}
@@ -82,6 +91,7 @@ func migrate(db *gorm.DB) error {
 		&model.DefectFinding{},
 		&model.PriorityDecision{},
 		&model.PriorityDecisionRevision{},
+		&model.InspectionCompletionCheck{},
 	)
 }
 
@@ -188,17 +198,26 @@ func seedDefectFinding(ctx context.Context, db *gorm.DB) error {
 		{BaseModel: model.BaseModel{Code: "DF-001", Name: "缺陷发现示例一", Status: "new", Version: 1,
 			Description: "用于启动验证和主要流程演示的缺陷发现记录"}, Facility: "铁路桥梁缺陷处置优先级区域1", Owner: "运行一组",
 			Category: "常规", RiskLevel: "low", MetricValue: 12.5, MetricUnit: "unit",
-			EffectiveAt: now.Add(0 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-520-01"},
+			EffectiveAt: now.Add(0 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "IR-001"},
 
 		{BaseModel: model.BaseModel{Code: "DF-002", Name: "缺陷发现示例二", Status: "verified", Version: 1,
 			Description: "用于启动验证和主要流程演示的缺陷发现记录"}, Facility: "铁路桥梁缺陷处置优先级区域2", Owner: "质量复核组",
 			Category: "重点", RiskLevel: "medium", MetricValue: 25.0, MetricUnit: "%",
-			EffectiveAt: now.Add(3 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-520-02"},
+			EffectiveAt: now.Add(3 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "IR-002"},
 
 		{BaseModel: model.BaseModel{Code: "DF-003", Name: "缺陷发现示例三", Status: "monitoring", Version: 1,
 			Description: "用于启动验证和主要流程演示的缺陷发现记录"}, Facility: "铁路桥梁缺陷处置优先级区域3", Owner: "安全主管组",
 			Category: "复核", RiskLevel: "high", MetricValue: 37.5, MetricUnit: "score",
-			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-520-03"},
+			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "IR-003",
+			DispositionBasis: "复核会确认纳入周期性监测，待加固后复测"},
+
+		// DF-004 belongs to the review round IR-003 but is still verified and
+		// has no priority decision, so completing IR-003 is blocked until the
+		// defect is disposed with a written basis.
+		{BaseModel: model.BaseModel{Code: "DF-004", Name: "缺陷发现示例四", Status: "verified", Version: 1,
+			Description: "用于演示完成前缺陷处置核验的阻塞缺陷"}, Facility: "铁路桥梁缺陷处置优先级区域3", Owner: "安全主管组",
+			Category: "复核", RiskLevel: "critical", MetricValue: 62.0, MetricUnit: "score",
+			EffectiveAt: now.Add(7 * time.Hour), Evidence: "腹板斜向裂缝复测照片与量测记录", RelatedCode: "IR-003"},
 	}
 	return db.WithContext(ctx).Create(&items).Error
 }

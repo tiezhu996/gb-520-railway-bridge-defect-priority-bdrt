@@ -94,11 +94,19 @@ func (s *defectFindingService) Transition(ctx context.Context, id uint, input dt
 	if err != nil {
 		return model.DefectFinding{}, err
 	}
+	before := current.Status
 	target := strings.TrimSpace(input.Status)
 	if !constants.CanTransition(constants.DefectFindingTransitions, current.Status, target) {
 		return model.DefectFinding{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, current.Status, target)
 	}
-	before := current.Status
+	// A disposition transition must carry the written basis; reopening the
+	// defect clears a basis that no longer applies.
+	switch target {
+	case string(constants.DefectStateMonitoring), string(constants.DefectStateMitigated), string(constants.DefectStateClosed):
+		current.DispositionBasis = strings.TrimSpace(input.Reason)
+	default:
+		current.DispositionBasis = ""
+	}
 	current.Status = target
 	current.Version = input.ExpectedVersion + 1
 	current.UpdatedAt = time.Now().UTC()

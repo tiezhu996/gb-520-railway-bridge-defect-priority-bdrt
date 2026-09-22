@@ -22,7 +22,9 @@ func NewInspectionRoundHandler(s service.InspectionRoundService) *InspectionRoun
 func (h *InspectionRoundHandler) Register(group *gin.RouterGroup) {
 	resource := group.Group("/inspections")
 	resource.GET("", h.list)
+	resource.GET("/completion-checks", h.completionChecks)
 	resource.GET("/:id", h.get)
+	resource.GET("/:id/completion-check", h.completionCheckForRound)
 	resource.POST("", middleware.RequireMinimumRole(model.RoleOperator), h.create)
 	resource.PUT("/:id", middleware.RequireMinimumRole(model.RoleOperator), h.update)
 	resource.POST("/:id/transition", middleware.RequireMinimumRole(model.RoleOperator), h.transition)
@@ -45,6 +47,28 @@ func (h *InspectionRoundHandler) get(c *gin.Context) {
 		return
 	}
 	item, err := h.service.Get(c.Request.Context(), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	util.OK(c, item)
+}
+
+func (h *InspectionRoundHandler) completionChecks(c *gin.Context) {
+	items, err := h.service.CompletionChecks(c.Request.Context())
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	util.OK(c, items)
+}
+
+func (h *InspectionRoundHandler) completionCheckForRound(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	item, err := h.service.CompletionCheckForRound(c.Request.Context(), id)
 	if err != nil {
 		handleError(c, err)
 		return

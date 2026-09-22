@@ -16,6 +16,10 @@ type DefectFinding struct {
 	EffectiveAt time.Time `json:"effectiveAt"`
 	Evidence    string    `json:"evidence" gorm:"size:2000"`
 	RelatedCode string    `json:"relatedCode" gorm:"size:64;index"`
+	// DispositionBasis records why a 缺陷发现 was moved into monitoring,
+	// mitigated or closed. It is set during a disposition transition and
+	// cleared when the defect is reopened before completion verification.
+	DispositionBasis string `json:"dispositionBasis" gorm:"size:500"`
 }
 
 func (item *DefectFinding) GetBase() *BaseModel { return &item.BaseModel }

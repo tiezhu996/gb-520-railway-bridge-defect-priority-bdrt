@@ -15,10 +15,33 @@ export interface DomainRecord {
   effectiveAt: string;
   evidence: string;
   relatedCode: string;
+  dispositionBasis?: string;
   preparedBy?: string;
   revisions?: PriorityDecisionRevision[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CompletionBlocker {
+  defectId: number;
+  defectCode: string;
+  status: string;
+  riskLevel: string;
+  reason: string;
+  code: string;
+}
+
+export interface CompletionCheck {
+  id: number;
+  inspectionRoundId: number;
+  roundCode: string;
+  passed: boolean;
+  defectTotal: number;
+  checkedDefectIds: string;
+  blockers: CompletionBlocker[];
+  actor: string;
+  requestId: string;
+  checkedAt: string;
 }
 
 export interface PriorityDecisionRevision {

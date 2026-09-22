@@ -1,6 +1,6 @@
 
 import { request } from './client';
-import type { DomainRecord } from '../types/domain';
+import type { CompletionCheck, DomainRecord } from '../types/domain';
 
 export async function listInspectionRound(page = 1, pageSize = 20, search = '') {
   return request<DomainRecord[]>(`/inspections?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`);
@@ -12,4 +12,7 @@ export async function transitionInspectionRound(id: number, status: string, expe
   return request<DomainRecord>(`/inspections/${id}/transition`, {
     method: 'POST', body: JSON.stringify({ status, expectedVersion, reason }),
   });
+}
+export async function listCompletionChecks() {
+  return request<CompletionCheck[]>('/inspections/completion-checks');
 }
