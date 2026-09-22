@@ -9,6 +9,7 @@ import SeverityBadge from './common/SeverityBadge.vue';
 import EvidenceGallery from './common/EvidenceGallery.vue';
 import MetricCard from './common/MetricCard.vue';
 import ConfirmDialog from './common/ConfirmDialog.vue';
+import CompletionCheckCell from './common/CompletionCheckCell.vue';
 
 const props = withDefaults(defineProps<{ config: EntityConfig; store: any; showEvidence?: boolean }>(), { showEvidence: false });
 const { session, canAtLeast } = useAuth();
@@ -68,6 +69,8 @@ async function confirmTransition() {
 				<el-table-column prop="code" label="编码" width="150"/>
 				<el-table-column label="名称" min-width="180"><template #default="{ row }"><strong>{{ row.name }}</strong><small>{{ row.facility }}</small></template></el-table-column>
 				<el-table-column label="状态" width="130"><template #default="{ row }"><StatusBadge :status="row.status"/></template></el-table-column>
+				<el-table-column v-if="config.key === 'inspectionRound'" label="完成核验" width="120"><template #default="{ row }"><CompletionCheckCell :round-check="row.latestCompletionCheck"/></template></el-table-column>
+				<el-table-column v-if="config.key === 'defectFinding'" label="完成核验" width="120"><template #default="{ row }"><CompletionCheckCell :defect-check="row.completionCheck"/></template></el-table-column>
 				<el-table-column label="风险" width="90"><template #default="{ row }"><SeverityBadge v-if="['defectFinding', 'priorityDecision'].includes(config.key)" :severity="row.riskLevel"/><span v-else>{{ row.riskLevel }}</span></template></el-table-column>
 				<el-table-column prop="owner" label="责任人" min-width="130"/>
 				<el-table-column label="指标" width="120"><template #default="{ row }">{{ row.metricValue }} {{ row.metricUnit }}</template></el-table-column>

@@ -25,18 +25,36 @@ type DefectFindingService interface {
 type defectFindingService struct {
 	repository repository.DefectFindingRepository
 	security   SecurityService
+	gate       CompletionGateService
 }
 
-func NewDefectFindingService(repo repository.DefectFindingRepository, security SecurityService) DefectFindingService {
-	return &defectFindingService{repository: repo, security: security}
+func NewDefectFindingService(repo repository.DefectFindingRepository, security SecurityService, gate CompletionGateService) DefectFindingService {
+	return &defectFindingService{repository: repo, security: security, gate: gate}
 }
 
 func (s *defectFindingService) List(ctx context.Context, query dto.PageQuery) (repository.Page[model.DefectFinding], error) {
-	return s.repository.List(ctx, query)
+	page, err := s.repository.List(ctx, query)
+	if err != nil {
+		return page, err
+	}
+	items, err := s.gate.EnrichDefects(ctx, page.Items)
+	if err != nil {
+		return page, err
+	}
+	page.Items = items
+	return page, nil
 }
 
 func (s *defectFindingService) Get(ctx context.Context, id uint) (model.DefectFinding, error) {
-	return s.repository.Get(ctx, id)
+	item, err := s.repository.Get(ctx, id)
+	if err != nil {
+		return model.DefectFinding{}, err
+	}
+	items, err := s.gate.EnrichDefects(ctx, []model.DefectFinding{item})
+	if err != nil {
+		return model.DefectFinding{}, err
+	}
+	return items[0], nil
 }
 
 func (s *defectFindingService) Create(ctx context.Context, input dto.CreateDefectFinding, actor, requestID string) (model.DefectFinding, error) {

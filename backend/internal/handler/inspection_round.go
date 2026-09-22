@@ -23,6 +23,7 @@ func (h *InspectionRoundHandler) Register(group *gin.RouterGroup) {
 	resource := group.Group("/inspections")
 	resource.GET("", h.list)
 	resource.GET("/:id", h.get)
+	resource.GET("/:id/completion-check", h.latestCompletionCheck)
 	resource.POST("", middleware.RequireMinimumRole(model.RoleOperator), h.create)
 	resource.PUT("/:id", middleware.RequireMinimumRole(model.RoleOperator), h.update)
 	resource.POST("/:id/transition", middleware.RequireMinimumRole(model.RoleOperator), h.transition)
@@ -50,6 +51,28 @@ func (h *InspectionRoundHandler) get(c *gin.Context) {
 		return
 	}
 	util.OK(c, item)
+}
+
+func (h *InspectionRoundHandler) latestCompletionCheck(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	item, err := h.service.Get(c.Request.Context(), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	check, exists, err := h.service.LatestCompletionCheck(c.Request.Context(), item.Code)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	if !exists {
+		util.Fail(c, http.StatusNotFound, "not_found", "no completion verification has been recorded for this inspection round")
+		return
+	}
+	util.OK(c, check)
 }
 
 func (h *InspectionRoundHandler) create(c *gin.Context) {

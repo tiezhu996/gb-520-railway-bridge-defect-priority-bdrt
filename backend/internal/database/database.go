@@ -82,6 +82,7 @@ func migrate(db *gorm.DB) error {
 		&model.DefectFinding{},
 		&model.PriorityDecision{},
 		&model.PriorityDecisionRevision{},
+		&model.InspectionCompletionCheck{},
 	)
 }
 

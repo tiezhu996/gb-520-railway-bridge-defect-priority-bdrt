@@ -16,6 +16,11 @@ type DefectFinding struct {
 	EffectiveAt time.Time `json:"effectiveAt"`
 	Evidence    string    `json:"evidence" gorm:"size:2000"`
 	RelatedCode string    `json:"relatedCode" gorm:"size:64;index"`
+
+	// CompletionCheck is populated by the service for read responses and is never
+	// persisted on the aggregate itself. It references the latest passing batch
+	// completion verification that covered this defect.
+	CompletionCheck *DefectCompletionCheckView `json:"completionCheck,omitempty" gorm:"-"`
 }
 
 func (item *DefectFinding) GetBase() *BaseModel { return &item.BaseModel }

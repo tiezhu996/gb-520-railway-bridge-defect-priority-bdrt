@@ -16,14 +16,17 @@ type DefectFindingRepository interface {
 	Update(context.Context, uint, uint, *model.DefectFinding) error
 	Delete(context.Context, uint) error
 	CountByStatus(context.Context) (map[string]int64, error)
+	ListByRelatedCodes(ctx context.Context, relatedCodes []string) ([]model.DefectFinding, error)
+	ListAll(ctx context.Context) ([]model.DefectFinding, error)
 }
 
 type defectFindingRepository struct {
+	db    *gorm.DB
 	store *Store[model.DefectFinding]
 }
 
 func NewDefectFindingRepository(db *gorm.DB) DefectFindingRepository {
-	return &defectFindingRepository{store: NewStore[model.DefectFinding](db)}
+	return &defectFindingRepository{db: db, store: NewStore[model.DefectFinding](db)}
 }
 
 func (r *defectFindingRepository) List(ctx context.Context, q dto.PageQuery) (Page[model.DefectFinding], error) {
@@ -43,4 +46,24 @@ func (r *defectFindingRepository) Delete(ctx context.Context, id uint) error {
 }
 func (r *defectFindingRepository) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	return r.store.CountByStatus(ctx)
+}
+
+// ListByRelatedCodes returns defects whose relatedCode references one of the
+// supplied business codes (defect->批次 association uses 缺陷.relatedCode = 批次.code).
+func (r *defectFindingRepository) ListByRelatedCodes(ctx context.Context, relatedCodes []string) ([]model.DefectFinding, error) {
+	items := make([]model.DefectFinding, 0)
+	if len(relatedCodes) == 0 {
+		return items, nil
+	}
+	err := r.db.WithContext(ctx).
+		Where("UPPER(TRIM(related_code)) IN ?", relatedCodes).
+		Order("id ASC").Find(&items).Error
+	return items, err
+}
+
+// ListAll returns every non-deleted defect for completion-check enrichment.
+func (r *defectFindingRepository) ListAll(ctx context.Context) ([]model.DefectFinding, error) {
+	items := make([]model.DefectFinding, 0)
+	err := r.db.WithContext(ctx).Order("id ASC").Find(&items).Error
+	return items, err
 }

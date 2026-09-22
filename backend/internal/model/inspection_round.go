@@ -16,6 +16,10 @@ type InspectionRound struct {
 	EffectiveAt time.Time `json:"effectiveAt"`
 	Evidence    string    `json:"evidence" gorm:"size:2000"`
 	RelatedCode string    `json:"relatedCode" gorm:"size:64;index"`
+
+	// LatestCompletionCheck is populated by the service for read responses and is
+	// never persisted on the aggregate itself.
+	LatestCompletionCheck *CompletionCheckView `json:"latestCompletionCheck,omitempty" gorm:"-"`
 }
 
 func (item *InspectionRound) GetBase() *BaseModel { return &item.BaseModel }
@@ -23,3 +27,11 @@ func (item *InspectionRound) GetBase() *BaseModel { return &item.BaseModel }
 func (item InspectionRound) TableName() string { return "inspection_rounds" }
 
 var InspectionRoundInitialStatus = "planned"
+
+// InspectionRoundCodeRef is a lightweight projection used to resolve
+// defect-to-round associations without loading full aggregates.
+type InspectionRoundCodeRef struct {
+	ID          uint
+	Code        string
+	RelatedCode string
+}

@@ -1,4 +1,39 @@
 
+export interface CompletionDefectDetail {
+  defectId: number;
+  defectCode: string;
+  state: string;
+  riskLevel: string;
+  disposed: boolean;
+  dispositionBasis: string;
+  priorityCode: string;
+  priorityStatus: string;
+  blockerReason?: string;
+  blockerMessage?: string;
+}
+
+export interface CompletionCheck {
+  inspectionRoundId: number;
+  roundCode: string;
+  status: 'passed' | 'blocked';
+  actor: string;
+  requestId: string;
+  relatedDefectCount: number;
+  blockerCodes: string[];
+  details: { roundStatus: string; defects: CompletionDefectDetail[] };
+  createdAt: string;
+}
+
+export interface DefectCompletionCheck {
+  inspectionRoundId: number;
+  roundCode: string;
+  status: 'passed' | 'blocked';
+  actor: string;
+  requestId: string;
+  defect: CompletionDefectDetail;
+  createdAt: string;
+}
+
 export interface DomainRecord {
   id: number;
   code: string;
@@ -17,6 +52,8 @@ export interface DomainRecord {
   relatedCode: string;
   preparedBy?: string;
   revisions?: PriorityDecisionRevision[];
+  latestCompletionCheck?: CompletionCheck | null;
+  completionCheck?: DefectCompletionCheck | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -16,6 +16,7 @@ type SecurityRepository interface {
 	ListAudits(context.Context, int, int, string) ([]model.AuditLog, int64, error)
 	SummarizeAudits(context.Context, time.Time) (model.AuditSummary, error)
 	EntityHistory(context.Context, string, uint, int) ([]model.AuditLog, error)
+	DefectTransitionAudits(ctx context.Context, defectIDs []uint) (map[uint]model.AuditLog, error)
 }
 
 type securityRepository struct{ db *gorm.DB }
@@ -100,4 +101,26 @@ func (r *securityRepository) EntityHistory(ctx context.Context, entityType strin
 	err := r.db.WithContext(ctx).Where("entity_type = ? AND entity_id = ?", entityType, entityID).
 		Order("created_at DESC").Limit(limit).Find(&logs).Error
 	return logs, err
+}
+
+// DefectTransitionAudits returns, keyed by defect id, the most recent
+// DefectFinding transition audit for each supplied defect. The detail field of
+// that audit is the disposition basis the operator supplied when moving the
+// defect into monitoring/mitigated/closed.
+func (r *securityRepository) DefectTransitionAudits(ctx context.Context, defectIDs []uint) (map[uint]model.AuditLog, error) {
+	result := make(map[uint]model.AuditLog)
+	if len(defectIDs) == 0 {
+		return result, nil
+	}
+	logs := make([]model.AuditLog, 0)
+	err := r.db.WithContext(ctx).
+		Where("entity_type = ? AND entity_id IN ? AND action = ?", "DefectFinding", defectIDs, "transition").
+		Order("id ASC").Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	for index := range logs {
+		result[logs[index].EntityID] = logs[index]
+	}
+	return result, nil
 }

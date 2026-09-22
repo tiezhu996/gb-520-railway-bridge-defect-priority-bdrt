@@ -83,6 +83,36 @@ locked_status=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "http://127.0.0.1
 [ "$locked_status" = "422" ]
 curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/audit-summary?windowHours=24" -H "Authorization: Bearer $reviewer_token" | jq -e '.data.total >= 3 and .data.transitions >= 1' >/dev/null
 
+# 检查批次完成前缺陷处置核验：阻塞 -> 处置 -> 通过 -> 重复完成仅一次
+round_code="IR-SMOKE-$(date +%s)"
+round_payload=$(jq -n --arg code "$round_code" --arg now "$now" '{code:$code,name:"空卷验收检查批次",description:"验证完成前缺陷处置核验",facility:"K42 桥梁作业区",owner:"运行一组",category:"结构",riskLevel:"high",metricValue:60,metricUnit:"score",effectiveAt:$now,evidence:"批次复核证据",relatedCode:""}')
+round_id=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/inspections" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d "$round_payload" | jq -er '.data.id')
+defect_code="DF-SMOKE-$(date +%s)"
+defect_payload=$(jq -n --arg code "$defect_code" --arg round "$round_code" --arg now "$now" '{code:$code,name:"空卷验收缺陷",description:"验证批次完成核验",facility:"K42 桥梁作业区",owner:"现场处置组",category:"结构",riskLevel:"critical",metricValue:88,metricUnit:"score",effectiveAt:$now,evidence:"裂缝照片与量测记录",relatedCode:$round}')
+defect_id=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/defects" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d "$defect_payload" | jq -er '.data.id')
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id/transition" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d '{"status":"review","expectedVersion":1,"reason":"提交复核"}' >/dev/null
+
+blocked_status=$(curl -sS -o /tmp/blocked.json -w '%{http_code}' -X POST "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id/transition" -H "Authorization: Bearer $reviewer_token" -H 'X-Request-ID: smoke-blocked' -H 'Content-Type: application/json' -d '{"status":"completed","expectedVersion":2,"reason":"缺陷未处置时尝试完成"}')
+[ "$blocked_status" = "422" ]
+printf '%s' "$(cat /tmp/blocked.json)" | jq --arg code "$defect_code" -e '.error == "business_rule" and (.message | contains($code))' >/dev/null
+curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id" -H "Authorization: Bearer $operator_token" | jq -e '.data.status == "review" and .data.version == 2 and .data.latestCompletionCheck.status == "blocked" and (.data.latestCompletionCheck.blockerCodes | length == 1)' >/dev/null
+curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id/completion-check" -H "Authorization: Bearer $viewer_token" | jq -e '.data.status == "blocked" and .data.requestId == "smoke-blocked"' >/dev/null
+curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/defects/$defect_id" -H "Authorization: Bearer $operator_token" | jq -e '.data.status == "new" and .data.completionCheck.status == "blocked" and .data.completionCheck.defect.blockerReason == "pending_disposition"' >/dev/null
+
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/defects/$defect_id/transition" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d '{"status":"verified","expectedVersion":1,"reason":"现场复核确认裂缝存在"}' >/dev/null
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/defects/$defect_id/transition" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d '{"status":"monitoring","expectedVersion":2,"reason":"纳入在线监测并设置变形阈值报警"}' >/dev/null
+smoke_priority_code="PD-SMOKE-GATE-$(date +%s)"
+smoke_priority=$(jq -n --arg code "$smoke_priority_code" --arg defect "$defect_code" --arg now "$now" '{code:$code,name:"空卷验收处置优先级",description:"严重缺陷定稿优先级",facility:"K42 桥梁作业区",owner:"现场处置组",category:"结构缺陷",riskLevel:"critical",metricValue:90,metricUnit:"score",effectiveAt:$now,evidence:"等级评定表与会审结论",relatedCode:$defect}')
+smoke_priority_id=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/priorities" -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -d "$smoke_priority" | jq -er '.data.id')
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/priorities/$smoke_priority_id/transition" -H "Authorization: Bearer $reviewer_token" -H 'X-Request-ID: smoke-gate-priority' -H 'Content-Type: application/json' -d '{"status":"urgent","expectedVersion":1,"reason":"独立复核确认需立即处置"}' >/dev/null
+
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id/transition" -H "Authorization: Bearer $reviewer_token" -H 'X-Request-ID: smoke-complete' -H 'Content-Type: application/json' -d '{"status":"completed","expectedVersion":2,"reason":"缺陷处置核验通过，批次完成"}' | jq -e '.data.status == "completed" and .data.version == 3 and .data.latestCompletionCheck.status == "passed" and .data.latestCompletionCheck.relatedDefectCount == 1' >/dev/null
+curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/defects/$defect_id" -H "Authorization: Bearer $operator_token" | jq --arg prio "$smoke_priority_code" -e '.data.completionCheck.status == "passed" and .data.completionCheck.defect.priorityCode == $prio and (.data.completionCheck.defect.dispositionBasis | length > 0)' >/dev/null
+
+duplicate_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id/transition" -H "Authorization: Bearer $reviewer_token" -H 'Content-Type: application/json' -d '{"status":"completed","expectedVersion":2,"reason":"重复完成必须失败"}')
+[ "$duplicate_status" = "422" ]
+curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/inspections/$round_id" -H "Authorization: Bearer $operator_token" | jq -e '.data.status == "completed" and .data.version == 3 and .data.latestCompletionCheck.requestId == "smoke-complete"' >/dev/null
+
 docker compose ps
 if [ "${KEEP_RUNNING:-0}" = "1" ]; then
 	echo "KEEP_RUNNING=1: containers left running for browser validation"

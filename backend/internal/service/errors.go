@@ -11,4 +11,5 @@ var (
 	ErrReviewRole        = errors.New("reviewer or admin role is required to finalize a priority")
 	ErrSeparationOfDuty  = errors.New("priority preparer cannot approve the same decision")
 	ErrNotDecisionOwner  = errors.New("only the preparer may edit this draft decision")
+	ErrCompletionBlocked = errors.New("inspection round completion blocked by defect disposition verification")
 )

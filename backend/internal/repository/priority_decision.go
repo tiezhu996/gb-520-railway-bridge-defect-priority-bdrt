@@ -17,6 +17,7 @@ type PriorityDecisionRepository interface {
 	UpdateWithRevision(context.Context, uint, uint, *model.PriorityDecision, *model.PriorityDecisionRevision) error
 	Delete(context.Context, uint) error
 	CountByStatus(context.Context) (map[string]int64, error)
+	ListByRelatedCodes(ctx context.Context, relatedCodes []string) ([]model.PriorityDecision, error)
 }
 
 type priorityDecisionRepository struct {
@@ -87,4 +88,17 @@ func (r *priorityDecisionRepository) Delete(ctx context.Context, id uint) error 
 }
 func (r *priorityDecisionRepository) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	return r.store.CountByStatus(ctx)
+}
+
+// ListByRelatedCodes returns priority decisions (without revisions) whose
+// relatedCode references one of the supplied defect codes.
+func (r *priorityDecisionRepository) ListByRelatedCodes(ctx context.Context, relatedCodes []string) ([]model.PriorityDecision, error) {
+	items := make([]model.PriorityDecision, 0)
+	if len(relatedCodes) == 0 {
+		return items, nil
+	}
+	err := r.db.WithContext(ctx).
+		Where("UPPER(TRIM(related_code)) IN ?", relatedCodes).
+		Order("id ASC").Find(&items).Error
+	return items, err
 }

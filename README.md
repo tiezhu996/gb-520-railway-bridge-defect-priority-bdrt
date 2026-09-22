@@ -42,6 +42,9 @@ docker compose down -v --remove-orphans
 - 所有状态变化使用乐观锁并写入审计日志；审计查询仅 reviewer/admin 可见。
 - 优先级决定的每次创建、草稿更新和定稿均追加不可变版本，保留证据、状态、操作者、request ID 和完整快照。
 - 优先级只能由不同于拟制人的 reviewer/admin 定稿；observe/restrict/urgent 均为不可覆盖终态。
+- 检查批次从复核进入完成前执行缺陷处置核验：同批次关联缺陷（缺陷 relatedCode 等于批次 code 或批次 relatedCode）中，新发现/已核实缺陷必须已转为监测、缓解或关闭并写明依据（迁移说明或已定稿优先级证据）；严重/关键风险缺陷还须关联已定稿的处置优先级，否则批次保留在复核态并返回阻塞缺陷编号。
+- 核验结果（通过/阻塞、阻塞编号、处置依据、操作者、request ID）追加写入只增的 `inspection_completion_checks` 表；检查页与缺陷页展示最新核验结果，刷新后可回读，也可通过 `GET /api/inspections/:id/completion-check` 查询。
+- 重复或并发完成只能成功一次：完成状态更新与通过核验记录在同一事务内做乐观锁提交，失败请求不改动批次、缺陷、决定和审计。
 - 请求 ID、结构化日志、全局错误映射和 Redis 分布式限流。
 - 提供脱敏运行配置、当前会话、审计汇总和单实体审计历史接口。
 - 业务工作台支持查询、新建、状态推进、风险标识及操作审计查看。
@@ -117,6 +120,8 @@ cd .. && docker compose config --quiet
 ```
 
 `PriorityDecisionRevision` 位于 `backend/internal/model/priority_decision.go`，与主记录在同一事务写入；查询 `/api/priorities` 或 `/api/priorities/:id` 时按版本升序返回 `revisions`。
+
+`InspectionCompletionCheck` 位于 `backend/internal/model/completion_check.go`，是只增的完成核验记录：阻塞的完成尝试只插入该表（批次、缺陷、决定、审计均不变），通过的完成与批次状态更新在同一事务提交。检查批次列表/详情返回 `latestCompletionCheck`，缺陷列表/详情返回 `completionCheck`，前端据此渲染共享组件 `CompletionCheckCell`。
 
 ## 共享枚举位置
 
